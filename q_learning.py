@@ -14,9 +14,6 @@ MAX_COMBOS = 10
 # max number of chances to be given to a hyperparameter combination
 MAX_CHANCE = 5
 
-# for testing
-MAX_TRIES = 5
-
 # HYPERPARAM BOUNDS
 hyp_bounds = {
     'alpha': {'min': 0.65, 'max': 0.90},
@@ -28,9 +25,11 @@ hyp_bounds = {
 # INITIAL HYPERPARAMS
 init_hyperparams = {}
 init_hyperparams['alpha'] = 0.80
-init_hyperparams['gamma'] = 0.0.90
+init_hyperparams['gamma'] = 0.90
 init_hyperparams['min_epsilon'] = 0.0095
 init_hyperparams['exp_decay_rate'] = 0.00025
+
+PERFORM_TUNING = False
 
 def search_random_hyperparams(cur_hyperparams):
     '''Random Search implementation
@@ -104,7 +103,7 @@ def tune_hyperparams(env):
 
         hyperparams = search_random_hyperparams(best_hyperparams)
 
-    return hyperparams
+    return best_hyperparams
 
 def get_q_table(env, hyperparams):
     '''Create and optimize q-table
@@ -120,7 +119,7 @@ def get_q_table(env, hyperparams):
     Q = np.zeros([env.observation_space.n, env.action_space.n])
 
     # initialize epsilon
-    epsilon = 1.0
+    epsilon = 0.0
 
     wins = 0
     for ep in range(MAX_EPISODES):
@@ -159,14 +158,16 @@ def get_q_table(env, hyperparams):
 def test_q_table(env, Q):
     '''Run using optimized q-table
     '''
-    for ep in range(MAX_TRIES):
+    wins = 0
+    #Q = np.random.random([env.observation_space.n, env.action_space.n])
+    for ep in range(MAX_EPISODES):
         cur_state = env.reset()
         
-        # fix epsilon
-        epsilon = 0.10
+        # fixed epsilon
+        epsilon = 0.009
 
         while True:
-            env.render()
+            #env.render()
 
             # generate probability of exploitation
             exploit_prob = np.random.uniform()
@@ -181,18 +182,39 @@ def test_q_table(env, Q):
 
             # current episode ended
             if done:
+                wins += reward
+                # if reward >= 1:
+                #     print("Game %d over. AI won!" % (ep+1))
+                # else:
+                #     print("Game %d over. AI lost." % (ep+1))
+
                 break
+
+    print("AI Score: %d/%d" % (wins, MAX_EPISODES))
 
 def main():
     '''Main
     '''
-    env = gym.make('FrozenLake8x8-v0')
+    env = gym.make('FrozenLake-v0')
     
-    # perform Q-learning multiple times to determine best hyperparams
-    print("Performing Q-learning for %d hyperparameter combos..." % MAX_COMBOS)
-    tune_hyperparams(env)
+    if PERFORM_TUNING:
+        # perform Q-learning multiple times to determine best hyperparams
+        print("Performing Q-learning for %d hyperparameter combos..." % MAX_COMBOS)
+        hyperparams = tune_hyperparams(env)
+    else:
+        hyperparams = init_hyperparams
 
-    #test_q_table(env, Q)
+    # get the best Q-table
+    best_wins = 0
+    print("Getting best Q-table...")
+    for i in tqdm(range(MAX_CHANCE)):
+        Q, wins = get_q_table(env, hyperparams)
+        print("Wins: %d" % wins)
+        if wins >= best_wins:
+            best_Q = Q
+    
+    # test the best q-table    
+    test_q_table(env, best_Q)
     
     env.close()
 
