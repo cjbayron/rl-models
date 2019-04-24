@@ -1,6 +1,7 @@
 '''Q-learning demonstration on FrozenLake gym environment
 '''
 import math
+from tqdm import tqdm
 import numpy as np
 import gym
 
@@ -9,7 +10,7 @@ MAX_EPISODES = 5000
 MAX_MOVES_PER_EP = 200
 
 # max number of hyperparamter combinations
-MAX_COMBOS = 1 #20
+MAX_COMBOS = 10
 # max number of chances to be given to a hyperparameter combination
 MAX_CHANCE = 5
 
@@ -24,46 +25,18 @@ hyp_bounds = {
     'exp_decay_rate': {'min': 1, 'max': 5},
 }
 
-# - for Bellman equation
-# alpha = 0.70    # learning rate
-# gamma = 0.90    # discount rate (for rewards)
-# min_epsilon = 0.01
-# exp_decay_rate = 0.5/(10**2)
-
-# add hyperparameter tuning
-
-# random search:
-#   sample from (min_alpha, max_alpha)
-#   sample from (min_gamma, max_gamma)
-#   sample from (min_epsilon, max_epsilon) ??
-#   sample from (min_decay_rate, max_decay_rate)
-#     - make sure these are normalized to (-1, 1)
-#
-#   perform q-learning
-#   get wins? rewards?
-#
-#   OR
-#
-#   for max_tries:
-#     perform q-learning
-#
-#   get average wins/rewards
-#
-#   if win/reward > prev:
-#      best hyperparameters = (current hyperparameters)
-#
-#   sample_within_hypersphere()
-#     - (if all params are normalized) imagine a unit sphere
-#     - from current point (hyperparam coords) choose a value within specific radius
-#     - if the next point will generate higher returns, then make it the next center
-#
-#   2 things to initialize here: the wins/rewards (=0), the hypersphere center (0,0?)
+# INITIAL HYPERPARAMS
+init_hyperparams = {}
+init_hyperparams['alpha'] = 0.80
+init_hyperparams['gamma'] = 0.0.90
+init_hyperparams['min_epsilon'] = 0.0095
+init_hyperparams['exp_decay_rate'] = 0.00025
 
 def search_random_hyperparams(cur_hyperparams):
     '''Random Search implementation
     '''
     radius = 1.0 # radius of whole hypersphere
-    search_rad = radius / 2 # radius of hypersphere to search for next hyperparams
+    search_rad = radius / 3 # radius of hypersphere to search for next hyperparams
 
     new_hyp = {}
     for hyp in cur_hyperparams:
@@ -96,11 +69,7 @@ def search_random_hyperparams(cur_hyperparams):
 
 def tune_hyperparams(env):
     # use initial hyperparams
-    hyperparams = {}
-    hyperparams['alpha'] = 0.75
-    hyperparams['gamma'] = 0.90
-    hyperparams['min_epsilon'] = 0.01
-    hyperparams['exp_decay_rate'] = 0.005
+    hyperparams = init_hyperparams
 
     # for saving the best hyperparams
     best_hyperparams = hyperparams
@@ -109,19 +78,27 @@ def tune_hyperparams(env):
     combo = 0
     while True:
         all_wins = []
-        for i in range(MAX_CHANCE):
+        for i in tqdm(range(MAX_CHANCE)):
             Q, wins = get_q_table(env, hyperparams)
             all_wins.append(wins)
 
         # get average wins
         ave_wins = sum(all_wins) / len(all_wins)
-        if ave_wins > best_ave_wins:
-            best_hyperparams = hyperparams
-            best_ave_wins = ave_wins 
 
         combo += 1
-        print("[Combo %d]\n  Average Wins: %0.2f\n  Lowest: %0.2f\n  "
+        print("[Combo %d]\nWin Summary\n  Average: %0.2f\n  Lowest: %0.2f\n  "
               "Highest: %0.2f" % (combo, ave_wins, min(all_wins), max(all_wins)))
+
+        if ave_wins > best_ave_wins:
+            best_hyperparams = hyperparams
+            best_ave_wins = ave_wins
+            print("[New Best]\n  alpha=%0.2f\n  gamma=%0.2f\n  "
+                  "min_epsilon=%0.4f\n  exp_decay_rate=%0.8f\n"
+                  % (best_hyperparams['alpha'],
+                     best_hyperparams['gamma'],
+                     best_hyperparams['min_epsilon'],
+                     best_hyperparams['exp_decay_rate']))
+
         if combo == MAX_COMBOS:
             break
 
@@ -212,6 +189,7 @@ def main():
     env = gym.make('FrozenLake8x8-v0')
     
     # perform Q-learning multiple times to determine best hyperparams
+    print("Performing Q-learning for %d hyperparameter combos..." % MAX_COMBOS)
     tune_hyperparams(env)
 
     #test_q_table(env, Q)
