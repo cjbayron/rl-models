@@ -2,6 +2,9 @@
 
 Reinforcement learning demonstration on various environments
 
+## Implementations
+* [q_learning.py](q_learning.py) - Q-learning on Gym's FrozenLake environment, with hyperparameter tuning functionality
+
 ## Authors
 
 * **Christopher John Bayron**
