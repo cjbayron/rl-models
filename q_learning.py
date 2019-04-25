@@ -1,5 +1,6 @@
 '''Q-learning demonstration on FrozenLake gym environment
 '''
+from os import system
 import math
 from tqdm import tqdm
 import numpy as np
@@ -10,24 +11,25 @@ MAX_EPISODES = 5000
 MAX_MOVES_PER_EP = 200
 
 # max number of hyperparamter combinations
-MAX_COMBOS = 10
+MAX_COMBOS = 20
 # max number of chances to be given to a hyperparameter combination
 MAX_CHANCE = 5
+
+# for testing
+MAX_TESTS = 5000
 
 # HYPERPARAM BOUNDS
 hyp_bounds = {
     'alpha': {'min': 0.65, 'max': 0.90},
     'gamma': {'min': 0.80, 'max': 0.95},
-    'min_epsilon': {'min': 0.005, 'max': 0.03},
-    'exp_decay_rate': {'min': 1, 'max': 5},
+    'decay_factor': {'min': -1, 'max': 1},
 }
 
 # INITIAL HYPERPARAMS
 init_hyperparams = {}
-init_hyperparams['alpha'] = 0.80
-init_hyperparams['gamma'] = 0.90
-init_hyperparams['min_epsilon'] = 0.0095
-init_hyperparams['exp_decay_rate'] = 0.00025
+init_hyperparams['alpha'] = 0.77
+init_hyperparams['gamma'] = 0.91
+init_hyperparams['decay_factor'] = 0.44 # actual decay factor is 10 raised to this value
 
 PERFORM_TUNING = False
 
@@ -42,15 +44,8 @@ def search_random_hyperparams(cur_hyperparams):
         ave = (hyp_bounds[hyp]['min'] + hyp_bounds[hyp]['max']) / 2.0
         rng = hyp_bounds[hyp]['max'] - hyp_bounds[hyp]['min']
 
-        if hyp == 'exp_decay_rate':
-            # for decay rate we perform random search on exponent of 10
-            # this is used as multiplier / divider on the actual decay rate
-            exponent = math.log10(0.5 / cur_hyperparams['exp_decay_rate'])
-            scaled_hyp = ((exponent - ave) / rng) * (radius/0.5)
-
-        else:
-            # we add x2 to create hypersphere of radius 1
-            scaled_hyp = ((cur_hyperparams[hyp] - ave) / rng) * (radius/0.5)
+        # we add x2 to create hypersphere of radius 1
+        scaled_hyp = ((cur_hyperparams[hyp] - ave) / rng) * (radius/0.5)
 
         # after scaling, choose uniformly for the next hyperparam
         low = scaled_hyp - search_rad
@@ -61,8 +56,6 @@ def search_random_hyperparams(cur_hyperparams):
         # sample, then de-normalize
         new_hyp[hyp] = np.random.uniform(low=low, high=high)
         new_hyp[hyp] = ((new_hyp[hyp] * (0.5/radius)) * rng) + ave
-        if hyp == 'exp_decay_rate':
-            new_hyp[hyp] = 0.5 / (10**new_hyp[hyp])
 
     return new_hyp
 
@@ -92,11 +85,10 @@ def tune_hyperparams(env):
             best_hyperparams = hyperparams
             best_ave_wins = ave_wins
             print("[New Best]\n  alpha=%0.2f\n  gamma=%0.2f\n  "
-                  "min_epsilon=%0.4f\n  exp_decay_rate=%0.8f\n"
+                  "decay_factor=%0.2f\n"
                   % (best_hyperparams['alpha'],
                      best_hyperparams['gamma'],
-                     best_hyperparams['min_epsilon'],
-                     best_hyperparams['exp_decay_rate']))
+                     10**best_hyperparams['decay_factor']))
 
         if combo == MAX_COMBOS:
             break
@@ -111,15 +103,11 @@ def get_q_table(env, hyperparams):
     # get hyperparams
     alpha = hyperparams['alpha']
     gamma = hyperparams['gamma']
-    min_epsilon = hyperparams['min_epsilon']
-    exp_decay_rate = hyperparams['exp_decay_rate']
+    df = hyperparams['decay_factor']
 
     # Q-table initalization
     # rows: states, cols: actions, cell value: expected reward
     Q = np.zeros([env.observation_space.n, env.action_space.n])
-
-    # initialize epsilon
-    epsilon = 0.0
 
     wins = 0
     for ep in range(MAX_EPISODES):
@@ -128,14 +116,8 @@ def get_q_table(env, hyperparams):
         for move in range(MAX_MOVES_PER_EP):
             #env.render()
 
-            # generate probability of exploitation
-            exploit_prob = np.random.uniform()
-
-            if exploit_prob > epsilon:
-                # choose best action based on current state
-                action = np.argmax(Q[cur_state, :]) # get index of best action
-            else:
-                action = env.action_space.sample()
+            action = np.argmax(Q[cur_state, :] + \
+                     np.random.randn(1, env.action_space.n)*(1./((ep+1)*(10**df))))
 
             prev_state = cur_state
             cur_state, reward, done, info = env.step(action)
@@ -150,23 +132,24 @@ def get_q_table(env, hyperparams):
                 wins += reward
                 break
 
-        # udpate epsilon
-        epsilon = min_epsilon + ((1.0 - min_epsilon) * np.exp(-exp_decay_rate * ep))
-
     return Q, wins
 
-def test_q_table(env, Q):
+def test_q_table(test_num, env, Q, random_agent=False):
     '''Run using optimized q-table
     '''
     wins = 0
     #Q = np.random.random([env.observation_space.n, env.action_space.n])
-    for ep in range(MAX_EPISODES):
+    for ep in range(MAX_TESTS):
         cur_state = env.reset()
         
         # fixed epsilon
         epsilon = 0.009
+        if random_agent:
+            epsilon = 1
 
         while True:
+            #system('clear')
+            #print("Test %d, Episode %d:" % (test_num+1, ep+1))
             #env.render()
 
             # generate probability of exploitation
@@ -183,19 +166,27 @@ def test_q_table(env, Q):
             # current episode ended
             if done:
                 wins += reward
-                # if reward >= 1:
-                #     print("Game %d over. AI won!" % (ep+1))
-                # else:
-                #     print("Game %d over. AI lost." % (ep+1))
-
                 break
 
-    print("AI Score: %d/%d" % (wins, MAX_EPISODES))
+    return wins
+
+def run_tester(test_name, test_func, *args):
+    all_wins = []
+    for i in tqdm(range(MAX_CHANCE)):
+        wins = test_func(i, *args)
+        all_wins.append(wins)
+
+    # get average wins
+    ave_wins = sum(all_wins) / len(all_wins)
+
+    print("[%s]\nWin Summary\n  Average: %0.2f\n  Lowest: %0.2f\n  "
+          "Highest: %0.2f\n  Ave. Win Rate: %0.4f\n" 
+          % (test_name, ave_wins, min(all_wins), max(all_wins), ave_wins/MAX_EPISODES))
 
 def main():
     '''Main
     '''
-    env = gym.make('FrozenLake-v0')
+    env = gym.make('FrozenLake8x8-v0')
     
     if PERFORM_TUNING:
         # perform Q-learning multiple times to determine best hyperparams
@@ -213,8 +204,17 @@ def main():
         if wins >= best_wins:
             best_Q = Q
     
-    # test the best q-table    
-    test_q_table(env, best_Q)
+    #input("Random agent will be tested. Press Enter to continue...")
+    print("Testing random agent...")
+    # test how well a random agent performs
+    run_tester("Random Agent", test_q_table,
+               env, best_Q, True)
+
+    #input("Learned Q-table will be tested. Press Enter to continue...")
+    print("Testing learned Q-table...")
+    # test how well a the learned agent performs
+    run_tester("Agent Q", test_q_table,
+               env, best_Q)
     
     env.close()
 
