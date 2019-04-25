@@ -1,7 +1,6 @@
 '''Q-learning demonstration on FrozenLake gym environment
 '''
 from os import system
-import math
 from tqdm import tqdm
 import numpy as np
 import gym
@@ -19,7 +18,7 @@ MAX_CHANCE = 5
 MAX_TESTS = 5000
 
 # HYPERPARAM BOUNDS
-hyp_bounds = {
+HYP_BOUNDS = {
     'alpha': {'min': 0.65, 'max': 0.90},
     'gamma': {'min': 0.80, 'max': 0.95},
     'decay_factor': {'min': -1, 'max': 1},
@@ -41,8 +40,8 @@ def search_random_hyperparams(cur_hyperparams):
 
     new_hyp = {}
     for hyp in cur_hyperparams:
-        ave = (hyp_bounds[hyp]['min'] + hyp_bounds[hyp]['max']) / 2.0
-        rng = hyp_bounds[hyp]['max'] - hyp_bounds[hyp]['min']
+        ave = (HYP_BOUNDS[hyp]['min'] + HYP_BOUNDS[hyp]['max']) / 2.0
+        rng = HYP_BOUNDS[hyp]['max'] - HYP_BOUNDS[hyp]['min']
 
         # we add x2 to create hypersphere of radius 1
         scaled_hyp = ((cur_hyperparams[hyp] - ave) / rng) * (radius/0.5)
@@ -52,7 +51,7 @@ def search_random_hyperparams(cur_hyperparams):
         high = scaled_hyp + search_rad
         # check if still within hypersphere
         low = low if (low >= -radius) else -radius
-        high = high if (high <= radius) else radius 
+        high = high if (high <= radius) else radius
         # sample, then de-normalize
         new_hyp[hyp] = np.random.uniform(low=low, high=high)
         new_hyp[hyp] = ((new_hyp[hyp] * (0.5/radius)) * rng) + ave
@@ -60,6 +59,8 @@ def search_random_hyperparams(cur_hyperparams):
     return new_hyp
 
 def tune_hyperparams(env):
+    '''Hyperparameter tuning
+    '''
     # use initial hyperparams
     hyperparams = init_hyperparams
 
@@ -112,7 +113,7 @@ def get_q_table(env, hyperparams):
     wins = 0
     for ep in range(MAX_EPISODES):
         cur_state = env.reset()
-        
+
         for move in range(MAX_MOVES_PER_EP):
             #env.render()
 
@@ -125,7 +126,7 @@ def get_q_table(env, hyperparams):
             # update Q-table
             Q[prev_state, action] = Q[prev_state, action] + \
                                     alpha*(reward + gamma*(np.max(Q[cur_state, :])) - \
-                                           Q[prev_state,action])
+                                           Q[prev_state, action])
 
             # current episode ended
             if done:
@@ -135,13 +136,13 @@ def get_q_table(env, hyperparams):
     return Q, wins
 
 def test_q_table(test_num, env, Q, random_agent=False):
-    '''Run using optimized q-table
+    '''Run using optimized q-table or random agent
     '''
     wins = 0
     #Q = np.random.random([env.observation_space.n, env.action_space.n])
     for ep in range(MAX_TESTS):
         cur_state = env.reset()
-        
+
         # fixed epsilon
         epsilon = 0.009
         if random_agent:
@@ -171,6 +172,8 @@ def test_q_table(test_num, env, Q, random_agent=False):
     return wins
 
 def run_tester(test_name, test_func, *args):
+    '''Wrapper function for testing environment
+    '''
     all_wins = []
     for i in tqdm(range(MAX_CHANCE)):
         wins = test_func(i, *args)
@@ -180,14 +183,14 @@ def run_tester(test_name, test_func, *args):
     ave_wins = sum(all_wins) / len(all_wins)
 
     print("[%s]\nWin Summary\n  Average: %0.2f\n  Lowest: %0.2f\n  "
-          "Highest: %0.2f\n  Ave. Win Rate: %0.4f\n" 
+          "Highest: %0.2f\n  Ave. Win Rate: %0.4f\n"
           % (test_name, ave_wins, min(all_wins), max(all_wins), ave_wins/MAX_EPISODES))
 
 def main():
     '''Main
     '''
     env = gym.make('FrozenLake8x8-v0')
-    
+
     if PERFORM_TUNING:
         # perform Q-learning multiple times to determine best hyperparams
         print("Performing Q-learning for %d hyperparameter combos..." % MAX_COMBOS)
@@ -203,7 +206,7 @@ def main():
         print("Wins: %d" % wins)
         if wins >= best_wins:
             best_Q = Q
-    
+
     #input("Random agent will be tested. Press Enter to continue...")
     print("Testing random agent...")
     # test how well a random agent performs
@@ -215,7 +218,7 @@ def main():
     # test how well a the learned agent performs
     run_tester("Agent Q", test_q_table,
                env, best_Q)
-    
+
     env.close()
 
 if __name__ == "__main__":
