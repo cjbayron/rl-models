@@ -102,7 +102,8 @@ def get_q_table(env, hyperparams):
     '''Create and optimize q-table
     '''
     # get hyperparams
-    alpha = hyperparams['alpha']
+    alpha = hyperparams['alpha'] # learning rate
+    # discount factor: importance we give to future rewards
     gamma = hyperparams['gamma']
     df = hyperparams['decay_factor']
 
@@ -117,6 +118,7 @@ def get_q_table(env, hyperparams):
         for move in range(MAX_MOVES_PER_EP):
             #env.render()
 
+            # add randomness to Q values, then pick best action
             action = np.argmax(Q[cur_state, :] + \
                      np.random.randn(1, env.action_space.n)*(1./((ep+1)*(10**df))))
 
